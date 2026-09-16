@@ -37,8 +37,10 @@ Features:
 - Suavização espacial (média dos vizinhos, kernel 3x3) da anomalia de `tp`,
   capturando padrões de chuva em escala regional — a feature isolada mais
   importante do modelo
-- **Índice ONI (Oceanic Niño Index, NOAA)** do mês atual — proxy direto do
-  estado do ENSO (El Niño/La Niña), 2ª feature mais importante
+- **Índice ONI (Oceanic Niño Index, NOAA)**, com lag 0/1/2 meses — proxy
+  direto do estado do ENSO (El Niño/La Niña); a resposta da chuva ao ENSO é
+  defasada, então os 3 lags juntos somam ~26% da importância do modelo
+- Ensemble de 3 seeds (média das previsões), pequeno ganho extra e menos ruído
 - Latitude, longitude, seno/cosseno do mês-alvo
 - Climatologia do mês-alvo (usada tanto como feature quanto como baseline
   somado de volta à previsão do resíduo)
@@ -65,7 +67,8 @@ justamente aí que o índice ONI ajuda o modelo a compensar).
 | v3 | últimos 5 anos | 1979+ | lags 0/1/2 | 1.7981 | 1.8266 | 1.6% | — |
 | v4 | últimos 5 anos | 1965+ | lags + suavização 3x3 | 1.7980 | 1.8352 | 2.0% | **1.9557** (#20) |
 | v5 | El Niño (48 meses) | 1965+ | igual a v4 | 1.9083 | 2.0599 | 7.4% | — |
-| v6 | El Niño (48 meses) | 1965+ | v5 + índice ONI | **1.8905** | 2.0599 | **8.2%** | *(a submeter)* |
+| v6 | El Niño (48 meses) | 1965+ | v5 + índice ONI | 1.8905 | 2.0599 | 8.2% | *(a submeter)* |
+| v7 | El Niño (48 meses) | 1965+ | v6 + ONI com lag (0/1/2) + ensemble 3 seeds | **1.8861** | 2.0599 | **8.4%** | *(a submeter)* |
 
 Tentativas descartadas:
 - `objective="tweedie"` sobre o valor absoluto (em vez do resíduo): piorou (-2.9%)
