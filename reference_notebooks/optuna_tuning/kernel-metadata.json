@@ -1,0 +1,23 @@
+{
+  "id": "robikscube/fast-tuning-with-xgboost-3-0-optuna-gpus",
+  "id_no": 87728770,
+  "title": "Fast Tuning with XGBoost 3.0 + Optuna + GPUs",
+  "code_file": "fast-tuning-with-xgboost-3-0-optuna-gpus.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [
+    "mlg-ulb/creditcardfraud"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": [],
+  "docker_image": "gcr.io/kaggle-private-byod/python@sha256:320043e14c68293f1c946585b9257123385205a58af4b94b17d31868cae4e868",
+  "machine_shape": "Gpu"
+}

@@ -65,10 +65,32 @@ justamente aí que o índice ONI ajuda o modelo a compensar).
 | v1 | últimos 5 anos | 1979+ | — (baseline) | 1.8039 | 1.8266 | 1.2% | — |
 | v2 | últimos 5 anos | 1995+ | lags 0/1/2 | 1.7690 | 1.7871 | 1.0% | — |
 | v3 | últimos 5 anos | 1979+ | lags 0/1/2 | 1.7981 | 1.8266 | 1.6% | — |
-| v4 | últimos 5 anos | 1965+ | lags + suavização 3x3 | 1.7980 | 1.8352 | 2.0% | **1.9557** (#20) |
+| v4 | últimos 5 anos | 1965+ | lags + suavização 3x3 | 1.7980 | 1.8352 | 2.0% | **1.95569** |
 | v5 | El Niño (48 meses) | 1965+ | igual a v4 | 1.9083 | 2.0599 | 7.4% | — |
-| v6 | El Niño (48 meses) | 1965+ | v5 + índice ONI | 1.8905 | 2.0599 | 8.2% | *(a submeter)* |
-| v7 | El Niño (48 meses) | 1965+ | v6 + ONI com lag (0/1/2) + ensemble 3 seeds | **1.8861** | 2.0599 | **8.4%** | *(a submeter)* |
+| v6 | El Niño (48 meses) | 1965+ | v5 + índice ONI | 1.8905 | 2.0599 | 8.2% | — |
+| v7 | El Niño (48 meses) | 1965+ | v6 + ONI com lag (0/1/2) + ensemble 3 seeds | 1.8861 | 2.0599 | 8.4% | **1.96904** (pior que v4!) |
+| — | últimos 5 anos | 1995+ | igual a v4 (menos anos) | 1.9311 | 2.0469 | 5.7% | — |
+
+**⚠️ Alerta importante: a validação em anos de El Niño (v5-v7) não previu o
+resultado real.** v7 parecia melhor que v4 na validação local (8.4% vs. 2.0%
+de ganho), mas no leaderboard real v7 saiu **pior** (1.96904 vs. 1.95569 do
+v4). A suspeita é que, ao validar só nos mesmos 4 eventos históricos de El
+Niño usados no treino (pool de 48 meses vindos de só 4 episódios), o modelo
+com ONI pode ter aprendido a reconhecer a assinatura específica desses 4
+eventos em vez do efeito genérico do ENSO -- o que não necessariamente
+generaliza pro evento real de 2023-2024. **Até isso ser resolvido, v4 (mais
+simples, sem ONI) é o nosso melhor resultado real confirmado.**
+
+Tentamos uma validação "leave-one-event-out" (`validate_leave_one_out.py`),
+mas abortamos por travar com pouca RAM livre. Baseado nos notebooks de
+referência do Rob Mulla (ver Referências), trocamos pra uma validação
+**walk-forward** de verdade (`validate_walkforward.py`, estilo
+`TimeSeriesSplit` do sklearn): vários folds cobrindo janelas de tempo
+diferentes ao longo de todo o histórico (não só os 4 eventos de El Niño),
+cada um treinando só com o passado e validando num pedaço nunca visto do
+"futuro" -- é o jeito estatisticamente correto de saber se o ONI generaliza,
+em vez de validar numa seleção enviesada por características do próprio
+evento que queremos prever. Resultado: *(rodando)*.
 
 Tentativas descartadas:
 - `objective="tweedie"` sobre o valor absoluto (em vez do resíduo): piorou (-2.9%)
@@ -77,6 +99,12 @@ Tentativas descartadas:
   ligação com a ZCAS: piorou o RMSE (1.8861 → 1.9010) e deixou o Centro do
   Brasil pior que a climatologia (-0.2%) — provavelmente redundante com o ONI
   e virou ruído com só 48 meses de validação
+- Modelo separado por região (Sul/Central/Norte): RMSE 1.8876 vs. 1.8861 do
+  modelo global — empate técnico, sem ganho real
+- Menos anos de histórico (1995+ em vez de 1965+): piorou (5.7% vs. 8.4% de
+  ganho na validação de El Niño) — mais histórico ajuda mais que recência
+- CatBoost em vez de LightGBM: abortado, estimativa de 15+ horas de treino
+  pra esse volume de dados (LightGBM treina o mesmo em minutos)
 
 ## Diagnóstico: onde o modelo ainda erra mais
 
@@ -105,6 +133,11 @@ mesmo padrão: ZCAS/ZCIT é a região mais difícil pra modelos baseados em árv
 - `inspect_data.py` / `inspect_data2.py` — scripts usados para entender a
   estrutura dos arquivos NetCDF e a relação entre `tp` / `tp_alvo` / teste
 - `oni.ascii.txt` — índice ONI histórico (NOAA), usado como feature de ENSO
+- `tna.data` / `tsa.data` — índices SST do Atlântico (NOAA), testados e descartados
+- `validate_leave_one_out.py` — validação "deixa 1 evento de El Niño de fora" (abortada por RAM)
+- `validate_walkforward.py` — validação walk-forward (`TimeSeriesSplit`), a correta
+- `reference_notebooks/` — notebooks do Rob Mulla (Kaggle Grandmaster) usados como
+  referência de técnica (cross-validation, feature engineering, tuning)
 
 ## Como reproduzir
 
@@ -116,3 +149,15 @@ python local_run.py
 
 Ajuste `DATA_DIR`, `YEAR_START` e `SMOOTH_SIZES` no topo de `local_run.py`
 conforme a RAM disponível.
+
+## Referências
+
+- Índice ONI (El Niño/La Niña): [NOAA CPC](https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt)
+- Índices TNA/TSA (SST Atlântico tropical, testados e descartados): [NOAA PSL](https://psl.noaa.gov/data/timeseries/month/DS/TNA/) / [TSA](https://psl.noaa.gov/data/timeseries/month/DS/TSA/)
+- [Exploring Machine Learning, Deep Learning, and Explainable AI Methods for Seasonal Precipitation Prediction in South America](https://arxiv.org/abs/2512.13910) — confirmou de forma independente dois achados nossos: multicolinearidade entre `surface_pressure`/`geopotential_850` e entre `t2`/`temperature_850`, e que a região de ZCAS/ZCIT é a mais difícil pra modelos baseados em árvore (Random Forest/XGBoost)
+- [Relação entre SACZ e SST durante eventos extremos de precipitação no Centro-Leste do Brasil](https://www.sciencedirect.com/science/article/abs/pii/S0377026523000738) — motivou (sem sucesso, ver "tentativas descartadas") testar SST do Atlântico como feature
+- Notebooks do [Rob Mulla](https://www.kaggle.com/robikscube) (Kaggle Grandmaster), baixados via API do Kaggle e usados como referência de técnica:
+  - [Cross Validation Visualized](https://www.kaggle.com/code/robikscube/cross-validation-visualized-youtube-tutorial) — a lição central: "o score médio out-of-fold é uma estimativa muito melhor de como o modelo vai performar em dado nunca visto" do que uma validação de conjunto único/enviesado
+  - [Tutorial: Time Series Forecasting with XGBoost (Parte 1 e 2)](https://www.kaggle.com/code/robikscube/tutorial-time-series-forecasting-with-xgboost) — `TimeSeriesSplit`, lag features, walk-forward validation
+  - [Ion Switching - 5KFold LGBM & Tracking](https://www.kaggle.com/code/robikscube/ion-switching-5kfold-lgbm-tracking) — padrão de out-of-fold (OOF) pooling e tracking sistemático de experimentos
+  - [Fast Tuning with XGBoost + Optuna](https://www.kaggle.com/code/robikscube/fast-tuning-with-xgboost-3-0-optuna-gpus) — "hyperparameter tuning é inútil sem uma validação adequada" (por isso resolvemos a validação antes de ajustar hiperparâmetro)

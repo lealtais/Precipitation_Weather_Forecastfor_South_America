@@ -1,0 +1,21 @@
+{
+  "id": "robikscube/pt2-time-series-forecasting-with-xgboost",
+  "id_no": 28812699,
+  "title": "PT2: Time Series Forecasting with XGBoost",
+  "code_file": "tutorial-time-series-forecasting-with-xgboost.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [],
+  "dataset_sources": [
+    "robikscube/hourly-energy-consumption"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": [],
+  "docker_image": "gcr.io/kaggle-images/python@sha256:00e9a495675c190349657c16541130575bd6435a395fa103b1f19fb21729cb78",
+  "machine_shape": "None"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "robikscube/ion-switching-5kfold-lgbm-tracking",
+  "id_no": 8196648,
+  "title": "Ion Switching - 5kfold LGBM & Tracking ",
+  "code_file": "ion-switching-5kfold-lgbm-tracking.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "keywords": [],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": [
+    "liverpool-ion-switching"
+  ],
+  "model_sources": [],
+  "docker_image": "gcr.io/kaggle-images/python@sha256:3a4e932b1b9589448ce8e49f0efeb1c5dc2bb842f61cdec2758ebe47967bddfe",
+  "machine_shape": "None"
+}

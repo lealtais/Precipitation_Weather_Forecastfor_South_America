@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import lightgbm as lgb
+from catboost import CatBoostRegressor
 from scipy.ndimage import uniform_filter
 
 DATA_DIR = r"C:\Users\China Link\.cache\kagglehub\competitions\previsao-climatica-de-precipitacao-sobre-a-america-do-sul"
@@ -22,6 +23,7 @@ FEATURE_VARS = [
 # Recorte mais curto que o notebook do Kaggle, propositalmente, pra caber em
 # poucos GB de RAM livre. Se rodar bem e sobrar memória, pode aumentar depois.
 YEAR_START = 1965
+MODEL_TYPE = "lightgbm"       # "lightgbm" ou "catboost" (catboost testado: 15h+ de treino, inviável nesse volume)
 MAX_LAG = 2
 SMOOTH_LAGS = (0, 1)          # lags (em meses) que também ganham versão suavizada espacialmente
 SMOOTH_SIZES = (3,)           # tamanhos do kernel espacial (5x5 testado e não ajudou)
@@ -201,33 +203,61 @@ X_va, y_va = df_train.loc[valid_mask, FEATURES], df_train.loc[valid_mask, "y_res
 del df_train
 gc.collect()
 
+def train_one_model(seed):
+    if MODEL_TYPE == "lightgbm":
+        m = lgb.LGBMRegressor(
+            objective="regression",
+            n_estimators=3000,
+            learning_rate=0.03,
+            num_leaves=127,
+            max_bin=127,
+            subsample=0.8,
+            subsample_freq=1,
+            colsample_bytree=0.8,
+            min_child_samples=200,
+            reg_lambda=1.0,
+            n_jobs=4,
+            random_state=seed,
+            importance_type="gain",
+        )
+        m.fit(
+            X_tr, y_tr,
+            eval_set=[(X_va, y_va)],
+            eval_metric="rmse",
+            callbacks=[lgb.early_stopping(50), lgb.log_evaluation(100)],
+        )
+        return m, m.predict(X_va, num_iteration=m.best_iteration_)
+    elif MODEL_TYPE == "catboost":
+        m = CatBoostRegressor(
+            iterations=3000,
+            learning_rate=0.03,
+            depth=8,
+            l2_leaf_reg=3.0,
+            rsm=0.8,
+            random_seed=seed,
+            loss_function="RMSE",
+            thread_count=4,
+            early_stopping_rounds=50,
+            verbose=100,
+        )
+        m.fit(X_tr, y_tr, eval_set=(X_va, y_va), use_best_model=True)
+        return m, m.predict(X_va)
+    raise ValueError(f"MODEL_TYPE desconhecido: {MODEL_TYPE}")
+
+
+def predict_model(m, X):
+    if MODEL_TYPE == "lightgbm":
+        return m.predict(X, num_iteration=m.best_iteration_)
+    return m.predict(X)
+
+
 models = []
 pred_resid_va_list = []
 for seed in ENSEMBLE_SEEDS:
-    print(f"\n--- treinando seed {seed} ---", flush=True)
-    m = lgb.LGBMRegressor(
-        objective="regression",
-        n_estimators=3000,
-        learning_rate=0.03,
-        num_leaves=127,
-        max_bin=127,
-        subsample=0.8,
-        subsample_freq=1,
-        colsample_bytree=0.8,
-        min_child_samples=200,
-        reg_lambda=1.0,
-        n_jobs=4,
-        random_state=seed,
-        importance_type="gain",
-    )
-    m.fit(
-        X_tr, y_tr,
-        eval_set=[(X_va, y_va)],
-        eval_metric="rmse",
-        callbacks=[lgb.early_stopping(50), lgb.log_evaluation(100)],
-    )
+    print(f"\n--- treinando seed {seed} ({MODEL_TYPE}) ---", flush=True)
+    m, pred = train_one_model(seed)
     models.append(m)
-    pred_resid_va_list.append(m.predict(X_va, num_iteration=m.best_iteration_))
+    pred_resid_va_list.append(pred)
 
 pred_resid_va = np.mean(pred_resid_va_list, axis=0)
 pred_full_va = np.clip(pred_resid_va + clim_full_va, 0, None)
@@ -256,6 +286,9 @@ for lo, hi, label in LAT_BANDS:
 imp = pd.Series(models[0].feature_importances_, index=FEATURES).sort_values(ascending=False)
 print("\nFeature importance (gain relativo, seed 0):", flush=True)
 print((100 * imp / imp.sum()).round(1).to_string(), flush=True)
+
+# Modelo por região testado e descartado: RMSE 1.8876 vs. 1.8861 do modelo
+# global (praticamente empate, levemente pior). Ver README.
 
 del X_tr, X_va, y_tr, y_va, pred_resid_va_list
 gc.collect()
@@ -295,9 +328,7 @@ for v in FEATURE_VARS:
 
 df_test = pd.DataFrame(Xt)[FEATURES]
 
-pred_resid_test = np.mean(
-    [m.predict(df_test, num_iteration=m.best_iteration_) for m in models], axis=0
-)
+pred_resid_test = np.mean([predict_model(m, df_test) for m in models], axis=0)
 pred_final = np.clip(pred_resid_test + Xt["clim_tp_next"], 0, None)
 
 times = pd.to_datetime(ds_test["time"].values)
