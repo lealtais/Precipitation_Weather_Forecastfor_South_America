@@ -1,9 +1,18 @@
 # ============================================================================
 # WORCAP/INPE — Previsão climática de precipitação sobre a América do Sul
-# Estratégia: prever a precipitação absoluta do mês seguinte com LightGBM
-# (objective="tweedie", adequado a variáveis positivas e assimétricas como
-# chuva), usando como features a climatologia do mês alvo + anomalias das
-# variáveis atmosféricas do mês atual + persistência (lags 0/1/2 meses).
+#
+# DESATUALIZADO: esta versão usa objective="tweedie" sobre o valor absoluto,
+# que testamos e piorou o resultado (ver README, "Tentativas descartadas").
+# A versão que realmente evoluiu (resíduo + lags + suavização espacial +
+# índice ONI + validação em anos de El Niño) está em `local_run.py`. Mantido
+# aqui só como referência de como rodar via notebook do Kaggle em vez de
+# localmente — precisaria ser atualizado com as mesmas features pra refletir
+# o resultado atual (RMSE 1.8905 / leaderboard 1.9557).
+#
+# Estratégia (desta versão): prever a precipitação absoluta do mês seguinte
+# com LightGBM (objective="tweedie"), usando como features a climatologia do
+# mês alvo + anomalias das variáveis atmosféricas do mês atual + persistência
+# (lags 0/1/2 meses).
 #
 # Como usar no Kaggle:
 #   1. Novo Notebook -> Add Input -> busque a competição e adicione o dataset

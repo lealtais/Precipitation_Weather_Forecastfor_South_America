@@ -34,28 +34,42 @@ Features:
 - Anomalias das 9 variáveis atmosféricas no mês atual (em relação à
   climatologia daquele mês-calendário)
 - Persistência: anomalia de `tp` no mês atual, mês-1 e mês-2
-- Suavização espacial (média dos vizinhos, kernels 3x3 e 5x5) da anomalia de
-  `tp`, capturando padrões de chuva em escala regional
+- Suavização espacial (média dos vizinhos, kernel 3x3) da anomalia de `tp`,
+  capturando padrões de chuva em escala regional — a feature isolada mais
+  importante do modelo
+- **Índice ONI (Oceanic Niño Index, NOAA)** do mês atual — proxy direto do
+  estado do ENSO (El Niño/La Niña), 2ª feature mais importante
 - Latitude, longitude, seno/cosseno do mês-alvo
 - Climatologia do mês-alvo (usada tanto como feature quanto como baseline
   somado de volta à previsão do resíduo)
 
-Modelo: LightGBM (`objective="regression"`), com split de validação
-**temporal** (últimos 5 anos), nunca aleatório — evita vazamento espacial/
-temporal.
+Modelo: LightGBM (`objective="regression"`), aprendendo o resíduo.
 
-## Log de resultados (RMSE de validação local vs. climatologia)
+### Validação: por que "últimos N meses" não bastava
 
-| Versão | Histórico | Features extras | RMSE modelo | RMSE climatologia | Ganho |
-|---|---|---|---|---|---|
-| v1 | 1979+ | — (baseline) | 1.8039 | 1.8266 | 1.2% |
-| v2 | 1995+ | lags 0/1/2 | 1.7690 | 1.7871 | 1.0% |
-| v3 | 1979+ | lags 0/1/2 | 1.7981 | 1.8266 | 1.6% |
-| v4 | 1965+ | lags + suavização 3x3 | 1.7980 | 1.8352 | 2.0% |
-| v5 | 1965+ | lags + suavização 3x3/5x5, modelo maior | *(em andamento)* | | |
+O período de teste real (jan/2023–dez/2024) coincide com um dos El Niño mais
+fortes já registrados. Validar em "últimos 5 anos" genéricos deu RMSE local
+de ~1.80, mas o placar real do Kaggle veio em **1.9557** — um gap grande
+demais pra ser só ruído. Trocamos a validação para os picos de El Niño forte
+do passado (DJF de 1982-83, 1997-98, 2009-10, 2015-16): o RMSE de validação
+foi pra ~1.90, muito mais perto do real, confirmando que esses episódios são
+estruturalmente mais difíceis (climatologia erra muito mais neles — e é
+justamente aí que o índice ONI ajuda o modelo a compensar).
 
-Tentativa descartada: `objective="tweedie"` sobre o valor absoluto (em vez do
-resíduo) piorou o resultado (-2.9%) — voltamos pro resíduo + L2.
+## Log de resultados
+
+| Versão | Validação | Histórico | Features extras | RMSE modelo | RMSE climatologia | Ganho | Leaderboard (público) |
+|---|---|---|---|---|---|---|---|
+| v1 | últimos 5 anos | 1979+ | — (baseline) | 1.8039 | 1.8266 | 1.2% | — |
+| v2 | últimos 5 anos | 1995+ | lags 0/1/2 | 1.7690 | 1.7871 | 1.0% | — |
+| v3 | últimos 5 anos | 1979+ | lags 0/1/2 | 1.7981 | 1.8266 | 1.6% | — |
+| v4 | últimos 5 anos | 1965+ | lags + suavização 3x3 | 1.7980 | 1.8352 | 2.0% | **1.9557** (#20) |
+| v5 | El Niño (48 meses) | 1965+ | igual a v4 | 1.9083 | 2.0599 | 7.4% | — |
+| v6 | El Niño (48 meses) | 1965+ | v5 + índice ONI | **1.8905** | 2.0599 | **8.2%** | *(a submeter)* |
+
+Tentativas descartadas:
+- `objective="tweedie"` sobre o valor absoluto (em vez do resíduo): piorou (-2.9%)
+- Suavização espacial 5x5 (além do 3x3) + modelo maior: sem ganho (2.0% → 2.0%)
 
 ## Arquivos
 
@@ -66,11 +80,13 @@ resíduo) piorou o resultado (-2.9%) — voltamos pro resíduo + L2.
   pronto para envio direto pelo Kaggle (Submit Predictions)
 - `inspect_data.py` / `inspect_data2.py` — scripts usados para entender a
   estrutura dos arquivos NetCDF e a relação entre `tp` / `tp_alvo` / teste
+- `oni.ascii.txt` — índice ONI histórico (NOAA), usado como feature de ENSO
 
 ## Como reproduzir
 
 ```bash
 python -m kagglehub competition_download previsao-climatica-de-precipitacao-sobre-a-america-do-sul
+curl -o oni.ascii.txt https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt
 python local_run.py
 ```
 

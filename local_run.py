@@ -24,7 +24,7 @@ FEATURE_VARS = [
 YEAR_START = 1965
 MAX_LAG = 2
 SMOOTH_LAGS = (0, 1)          # lags (em meses) que também ganham versão suavizada espacialmente
-SMOOTH_SIZES = (3, 5)         # tamanhos do kernel espacial (3x3 e 5x5)
+SMOOTH_SIZES = (3,)           # tamanhos do kernel espacial (5x5 testado e não ajudou)
 
 
 def load(name):
@@ -75,6 +75,33 @@ def month_index(dates):
     return (dates.year.values - EPOCH_YEAR) * 12 + (dates.month.values - 1)
 
 
+# --- índice ONI (El Niño/La Niña), NOAA -- proxy direto do estado do ENSO --
+def load_oni(path, n_series):
+    season_to_month = {
+        "DJF": 1, "JFM": 2, "FMA": 3, "MAM": 4, "AMJ": 5, "MJJ": 6,
+        "JJA": 7, "JAS": 8, "ASO": 9, "SON": 10, "OND": 11, "NDJ": 12,
+    }
+    lookup = np.full(n_series, np.nan, dtype=np.float32)
+    with open(path) as f:
+        next(f)
+        for line in f:
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            seas, yr, _total, anom = parts[0], int(parts[1]), parts[2], float(parts[3])
+            month = season_to_month.get(seas)
+            if month is None:
+                continue
+            idx = (yr - EPOCH_YEAR) * 12 + (month - 1)
+            if 0 <= idx < n_series:
+                lookup[idx] = anom
+    return lookup
+
+
+oni_lookup = load_oni(os.path.join(OUT_DIR, "oni.ascii.txt"), anom_full_series.shape[0])
+assert not np.isnan(oni_lookup[month_index(pd.DatetimeIndex([f"{YEAR_START}-01-01"]))[0]:]).any(), \
+    "faltou ONI em alguma parte do período usado -- baixe uma versão mais atual do oni.ascii.txt"
+
 month_t = ds_tp["time.month"]
 month_next = ((month_t % 12) + 1)
 clim_tp_next = clim_tp.sel(month=month_next)
@@ -94,6 +121,8 @@ for lag in range(0, MAX_LAG + 1):
 for size in SMOOTH_SIZES:
     for lag in SMOOTH_LAGS:
         X[f"anom_tp_smooth{size}_lag{lag}"] = to2d(anom_full_series_smooth[size][idx_t - lag], n_time).reshape(-1)
+
+X["oni"] = np.repeat(oni_lookup[idx_t].astype(np.float32), n_grid)
 
 X["lat"] = np.tile(lat_flat, n_time)
 X["lon"] = np.tile(lon_flat, n_time)
@@ -126,21 +155,43 @@ gc.collect()
 
 print("df_train pronto:", df_train.shape, flush=True)
 
-# --- split temporal + treino ------------------------------------------------
+# --- split de validação: anos de El Niño forte, não "últimos N meses" -----
+# 2023-2024 (período de teste real) foi um dos El Niño mais fortes já
+# registrados. Validar em "últimos 5 anos" genéricos não testa o modelo
+# nesse regime específico -- por isso o RMSE real (1.956) veio pior que a
+# validação genérica indicava (1.80). Validamos agora especificamente nos
+# picos dos El Niño fortes/muito fortes do passado (ONI >= ~1.5).
+EL_NINO_WINDOWS = [
+    ("1982-06", "1983-05"),
+    ("1997-06", "1998-05"),
+    ("2009-06", "2010-05"),
+    ("2015-06", "2016-05"),
+]
+
 FEATURES = [c for c in df_train.columns if c not in ("y_true", "y_resid")]
-cutoff = n_time - 60
-train_mask = time_idx < cutoff
-valid_mask = ~train_mask
+
+origin_dates = pd.DatetimeIndex(ds_tp.time.values[:n_time])
+target_dates = origin_dates + pd.DateOffset(months=1)   # mês que estamos prevendo
+
+is_el_nino_target = np.zeros(n_time, dtype=bool)
+for start, end in EL_NINO_WINDOWS:
+    is_el_nino_target |= (target_dates >= pd.Timestamp(start)) & (target_dates <= pd.Timestamp(end))
+
+print(f"Meses de validação (El Niño forte): {is_el_nino_target.sum()} de {n_time}", flush=True)
+assert is_el_nino_target.sum() > 0, "YEAR_START corta todas as janelas de El Niño escolhidas"
+
+valid_mask = np.repeat(is_el_nino_target, n_grid)
+train_mask = ~valid_mask
 
 X_tr, y_tr = df_train.loc[train_mask, FEATURES], df_train.loc[train_mask, "y_resid"]
 X_va, y_va = df_train.loc[valid_mask, FEATURES], df_train.loc[valid_mask, "y_resid"]
 
 model = lgb.LGBMRegressor(
     objective="regression",
-    n_estimators=5000,
+    n_estimators=3000,
     learning_rate=0.03,
-    num_leaves=255,
-    max_bin=255,
+    num_leaves=127,
+    max_bin=127,
     subsample=0.8,
     subsample_freq=1,
     colsample_bytree=0.8,
@@ -148,12 +199,13 @@ model = lgb.LGBMRegressor(
     reg_lambda=1.0,
     n_jobs=4,
     random_state=42,
+    importance_type="gain",
 )
 model.fit(
     X_tr, y_tr,
     eval_set=[(X_va, y_va)],
     eval_metric="rmse",
-    callbacks=[lgb.early_stopping(100), lgb.log_evaluation(100)],
+    callbacks=[lgb.early_stopping(50), lgb.log_evaluation(100)],
 )
 
 pred_resid_va = model.predict(X_va, num_iteration=model.best_iteration_)
@@ -166,6 +218,10 @@ rmse_clim = np.sqrt(np.mean((clim_full_va - true_full_va) ** 2))
 print(f"RMSE modelo:       {rmse_model:.4f} mm/dia", flush=True)
 print(f"RMSE climatologia: {rmse_clim:.4f} mm/dia", flush=True)
 print(f"Ganho sobre a climatologia: {100 * (1 - rmse_model / rmse_clim):.1f}%", flush=True)
+
+imp = pd.Series(model.feature_importances_, index=FEATURES).sort_values(ascending=False)
+print("\nFeature importance (gain relativo):", flush=True)
+print((100 * imp / imp.sum()).round(1).to_string(), flush=True)
 
 del df_train, X_tr, X_va, y_tr, y_va
 gc.collect()
@@ -182,6 +238,8 @@ for lag in range(0, MAX_LAG + 1):
 for size in SMOOTH_SIZES:
     for lag in SMOOTH_LAGS:
         Xt[f"anom_tp_smooth{size}_lag{lag}"] = anom_full_series_smooth[size][idx_origin_test - lag].reshape(n_time_test, -1).astype(np.float32).reshape(-1)
+
+Xt["oni"] = np.repeat(oni_lookup[idx_origin_test].astype(np.float32), n_grid)
 
 Xt["lat"] = np.tile(lat_flat, n_time_test)
 Xt["lon"] = np.tile(lon_flat, n_time_test)
