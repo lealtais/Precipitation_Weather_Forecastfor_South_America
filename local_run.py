@@ -104,6 +104,11 @@ oni_lookup = load_oni(os.path.join(OUT_DIR, "oni.ascii.txt"), anom_full_series.s
 assert not np.isnan(oni_lookup[month_index(pd.DatetimeIndex([f"{YEAR_START}-01-01"]))[0]:]).any(), \
     "faltou ONI em alguma parte do período usado -- baixe uma versão mais atual do oni.ascii.txt"
 
+
+# TNA/TSA (SST Atlântico Norte/Sul) testado e descartado: piorou o RMSE de
+# 1.8861 para 1.9010 e deixou o Centro do Brasil pior que a climatologia
+# (-0.2%). Ver README, "Tentativas descartadas".
+
 month_t = ds_tp["time.month"]
 month_next = ((month_t % 12) + 1)
 clim_tp_next = clim_tp.sel(month=month_next)
@@ -187,8 +192,14 @@ assert is_el_nino_target.sum() > 0, "YEAR_START corta todas as janelas de El Ni�
 valid_mask = np.repeat(is_el_nino_target, n_grid)
 train_mask = ~valid_mask
 
+true_full_va = df_train.loc[valid_mask, "y_true"].values.copy()
+clim_full_va = df_train.loc[valid_mask, "clim_tp_next"].values.copy()
+lat_va = df_train.loc[valid_mask, "lat"].values.copy()
+
 X_tr, y_tr = df_train.loc[train_mask, FEATURES], df_train.loc[train_mask, "y_resid"]
 X_va, y_va = df_train.loc[valid_mask, FEATURES], df_train.loc[valid_mask, "y_resid"]
+del df_train
+gc.collect()
 
 models = []
 pred_resid_va_list = []
@@ -219,9 +230,7 @@ for seed in ENSEMBLE_SEEDS:
     pred_resid_va_list.append(m.predict(X_va, num_iteration=m.best_iteration_))
 
 pred_resid_va = np.mean(pred_resid_va_list, axis=0)
-clim_full_va = df_train.loc[valid_mask, "clim_tp_next"].values
 pred_full_va = np.clip(pred_resid_va + clim_full_va, 0, None)
-true_full_va = df_train.loc[valid_mask, "y_true"].values
 
 rmse_model = np.sqrt(np.mean((pred_full_va - true_full_va) ** 2))
 rmse_clim = np.sqrt(np.mean((clim_full_va - true_full_va) ** 2))
@@ -233,11 +242,22 @@ for seed, pred in zip(ENSEMBLE_SEEDS, pred_resid_va_list):
     rmse_seed = np.sqrt(np.mean((np.clip(pred + clim_full_va, 0, None) - true_full_va) ** 2))
     print(f"  seed {seed} sozinho: {rmse_seed:.4f}", flush=True)
 
+# --- diagnóstico: onde o modelo ainda erra mais? (por faixa de latitude) ---
+LAT_BANDS = [(-60, -30, "Sul (Patagônia/Sul do Brasil-Argentina)"),
+             (-30, -10, "Central (Brasil central/Bolívia/Paraguai)"),
+             (-10, 15, "Norte (Amazônia/norte da América do Sul)")]
+print("\nRMSE por faixa de latitude (modelo vs. climatologia):", flush=True)
+for lo, hi, label in LAT_BANDS:
+    band_mask = (lat_va >= lo) & (lat_va < hi)
+    r_model = np.sqrt(np.mean((pred_full_va[band_mask] - true_full_va[band_mask]) ** 2))
+    r_clim = np.sqrt(np.mean((clim_full_va[band_mask] - true_full_va[band_mask]) ** 2))
+    print(f"  {label:45s} modelo={r_model:.4f}  climatologia={r_clim:.4f}  ganho={100*(1-r_model/r_clim):.1f}%", flush=True)
+
 imp = pd.Series(models[0].feature_importances_, index=FEATURES).sort_values(ascending=False)
 print("\nFeature importance (gain relativo, seed 0):", flush=True)
 print((100 * imp / imp.sum()).round(1).to_string(), flush=True)
 
-del df_train, X_tr, X_va, y_tr, y_va, pred_resid_va_list
+del X_tr, X_va, y_tr, y_va, pred_resid_va_list
 gc.collect()
 
 # --- features de teste -----------------------------------------------------

@@ -73,6 +73,27 @@ justamente aí que o índice ONI ajuda o modelo a compensar).
 Tentativas descartadas:
 - `objective="tweedie"` sobre o valor absoluto (em vez do resíduo): piorou (-2.9%)
 - Suavização espacial 5x5 (além do 3x3) + modelo maior: sem ganho (2.0% → 2.0%)
+- Índices TNA/TSA (SST Atlântico Norte/Sul) + gradiente, testado por hipótese de
+  ligação com a ZCAS: piorou o RMSE (1.8861 → 1.9010) e deixou o Centro do
+  Brasil pior que a climatologia (-0.2%) — provavelmente redundante com o ONI
+  e virou ruído com só 48 meses de validação
+
+## Diagnóstico: onde o modelo ainda erra mais
+
+RMSE por faixa de latitude (validação em anos de El Niño forte, v7):
+
+| Região | RMSE modelo | RMSE climatologia | Ganho |
+|---|---|---|---|
+| Sul (Patagônia/Sul BR-AR) | 1.2969 | 1.3151 | 1.4% |
+| Central (Brasil central/Bolívia/Paraguai) | 1.6622 | 1.6666 | 0.3% |
+| Norte (Amazônia) | 2.5429 | 2.9088 | **12.6%** |
+
+Quase todo o ganho sobre a climatologia vem da Amazônia (onde o El Niño tem
+efeito forte e conhecido). No Centro do Brasil (região de influência da ZCAS)
+o modelo mal supera a climatologia — e a correlação ONI x chuva medida
+diretamente nessa faixa é quase zero, então não é surpresa. Um [paper recente
+sobre o mesmo tipo de problema](https://arxiv.org/abs/2512.13910) reporta o
+mesmo padrão: ZCAS/ZCIT é a região mais difícil pra modelos baseados em árvore.
 
 ## Arquivos
 
