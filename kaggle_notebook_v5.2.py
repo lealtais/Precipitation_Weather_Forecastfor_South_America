@@ -39,7 +39,7 @@ from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegresso
 # Baixa os dados por código -- não precisa clicar em "Add Input" na tela
 DATA_DIR = kagglehub.competition_download("previsao-climatica-de-precipitacao-sobre-a-america-do-sul")
 print("Dados da competição baixados em:", DATA_DIR, flush=True)
-WORK_DIR = "/kaggle/working"
+WORK_DIR = next((d for d in ("/kaggle/working", "/content") if os.path.isdir(d)), ".")
 
 FEATURE_VARS = [
     "t2", "cloud_cover", "shum_850", "surface_pressure",
