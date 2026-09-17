@@ -26,6 +26,8 @@ import lightgbm as lgb
 import kagglehub
 from scipy.ndimage import uniform_filter
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
 
 # Baixa os dados por código -- não precisa clicar em "Add Input" na tela
 DATA_DIR = kagglehub.competition_download("previsao-climatica-de-precipitacao-sobre-a-america-do-sul")
@@ -272,7 +274,51 @@ print(f"n_estimators do modelo final: {N_ESTIMATORS_FINAL} "
       f"(mediana dos folds: {best_iters[WINNER]})", flush=True)
 
 
-### CÉLULA 5 — treinar o(s) modelo(s) final(is) com todo o histórico disponível
+### CÉLULA 5 — testar blend com Ridge (regressão linear regularizada)
+# Reaproveita os mesmos folds e as previsões OOF do LightGBM já calculadas
+# na Célula 4. Ideia vinda da pesquisa sobre regressão em clima: Ridge lida
+# bem com a multicolinearidade que já achamos entre nossas variáveis
+# atmosféricas (ex: t2 e temperature_850 têm correlação de 0.98) e pode
+# capturar sinal linear complementar ao que a árvore aprende.
+oof_pred_ridge = np.full(len(df), np.nan, dtype=np.float32)
+
+for fold, (tr_time_idx, va_time_idx) in enumerate(tss.split(time_idx_arr)):
+    train_mask = np.repeat(np.isin(time_idx_arr, tr_time_idx), n_grid)
+    valid_mask = np.repeat(np.isin(time_idx_arr, va_time_idx), n_grid)
+
+    X_tr = df.loc[train_mask, FEATURES_FINAL]
+    y_tr = df.loc[train_mask, "y_resid"]
+    X_va = df.loc[valid_mask, FEATURES_FINAL]
+
+    scaler = StandardScaler()
+    X_tr_s = scaler.fit_transform(X_tr)
+    X_va_s = scaler.transform(X_va)
+
+    ridge = Ridge(alpha=10.0, random_state=42)
+    ridge.fit(X_tr_s, y_tr)
+    oof_pred_ridge[valid_mask] = ridge.predict(X_va_s)
+    print(f"Ridge fold {fold+1}/{N_SPLITS} concluído", flush=True)
+    del X_tr, y_tr, X_va, scaler, ridge, X_tr_s, X_va_s
+    gc.collect()
+
+clim_all = df.loc[oof_covered, "clim_tp_next"].values
+pred_ridge_full = np.clip(oof_pred_ridge[oof_covered] + clim_all, 0, None)
+rmse_ridge = np.sqrt(np.mean((pred_ridge_full - true_all) ** 2))
+
+pred_blend_full = np.clip(
+    0.5 * oof_pred[WINNER][oof_covered] + 0.5 * oof_pred_ridge[oof_covered] + clim_all, 0, None
+)
+rmse_blend = np.sqrt(np.mean((pred_blend_full - true_all) ** 2))
+
+print(f"\nRMSE LightGBM ({WINNER}): {rmse_oof[WINNER]:.4f}", flush=True)
+print(f"RMSE Ridge:              {rmse_ridge:.4f}", flush=True)
+print(f"RMSE blend (50/50):      {rmse_blend:.4f}", flush=True)
+
+USE_BLEND = rmse_blend < rmse_oof[WINNER]
+print(f"\n>>> {'Usar' if USE_BLEND else 'NÃO usar'} blend com Ridge no modelo final <<<", flush=True)
+
+
+### CÉLULA 6 — treinar o(s) modelo(s) final(is) com todo o histórico disponível
 # Ensemble de 3 seeds pra reduzir ruído, treinado com TODOS os dados (sem
 # reservar validação) já que a escolha de features foi decidida na Célula 4.
 ENSEMBLE_SEEDS = (42, 7, 123)
@@ -293,11 +339,21 @@ imp = pd.Series(final_models[0].feature_importances_, index=FEATURES_FINAL).sort
 print("\nFeature importance (gain relativo, seed 0):", flush=True)
 print((100 * imp / imp.sum()).round(1).to_string(), flush=True)
 
+final_ridge, final_scaler = None, None
+if USE_BLEND:
+    print("\n--- treinando Ridge final (todos os dados) ---", flush=True)
+    final_scaler = StandardScaler()
+    X_all_s = final_scaler.fit_transform(X_all)
+    final_ridge = Ridge(alpha=10.0, random_state=42)
+    final_ridge.fit(X_all_s, y_all)
+    del X_all_s
+    gc.collect()
+
 del X_all, y_all
 gc.collect()
 
 
-### CÉLULA 6 — montar features de teste e prever
+### CÉLULA 7 — montar features de teste e prever
 month_origin_test = ds_test["time_origem"].dt.month
 month_target_test = ds_test["time"].dt.month
 idx_origin_test = month_index(pd.DatetimeIndex(ds_test["time_origem"].values))
@@ -335,10 +391,14 @@ for v in FEATURE_VARS:
 df_test = pd.DataFrame(Xt)[FEATURES_FINAL]
 
 pred_resid_test = np.mean([m.predict(df_test) for m in final_models], axis=0)
+if USE_BLEND:
+    df_test_s = final_scaler.transform(df_test)
+    pred_resid_ridge_test = final_ridge.predict(df_test_s)
+    pred_resid_test = 0.5 * pred_resid_test + 0.5 * pred_resid_ridge_test
 pred_final = np.clip(pred_resid_test + Xt["clim_tp_next"], 0, None)
 
 
-### CÉLULA 7 — montar o submission.csv
+### CÉLULA 8 — montar o submission.csv
 times = pd.to_datetime(ds_test["time"].values)
 latlon_str = np.array([f"{la:.2f}_{lo:.2f}" for la, lo in zip(lat_flat, lon_flat)])
 ids = np.concatenate([np.char.add(f"{t.year}_{t.month:02d}_", latlon_str) for t in times])

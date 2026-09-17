@@ -196,12 +196,16 @@ print("df pronto:", df.shape, flush=True)
 FEATURES_WITH_ONI = [c for c in df.columns if c not in ("y_true", "y_resid")]
 
 
-### CÉLULA 4 — comparar LightGBM, LightGBM-RF, XGBoost, HistGB e Random Forest
+### CÉLULA 4 — comparar LightGBM, LightGBM-RF e XGBoost
+# hist_gb e random_forest tirados da lista principal: travaram/demoraram
+# demais em testes reais (sklearn não aguenta esse volume de dados nem na
+# versão "rápida" por histograma). As funções continuam definidas embaixo
+# caso queira testar de novo com paciência -- só não entram no loop padrão.
 # Usa o conjunto completo de features (com ONI) -- a pergunta aqui é sobre o
 # MODELO, não sobre feature. A pergunta do ONI é respondida em paralelo pelo
 # notebook v2.
 FEATURES_ALL = FEATURES_WITH_ONI
-MODEL_TYPES = ["lightgbm", "lightgbm_rf", "xgboost", "hist_gb", "random_forest"]
+MODEL_TYPES = ["lightgbm", "lightgbm_rf", "xgboost"]
 
 
 def fit_predict(model_type, X_tr, y_tr, X_va, y_va, seed=42, overrides=None):
