@@ -123,6 +123,43 @@ diretamente nessa faixa é quase zero, então não é surpresa. Um [paper recent
 sobre o mesmo tipo de problema](https://arxiv.org/abs/2512.13910) reporta o
 mesmo padrão: ZCAS/ZCIT é a região mais difícil pra modelos baseados em árvore.
 
+## Notebooks do Kaggle (histórico de versões)
+
+A máquina local não tinha RAM suficiente pra rodar validação walk-forward
+completa, então a partir daqui os experimentos passaram a rodar direto num
+notebook do Kaggle (mais memória). Cada arquivo `kaggle_notebook_*.py` é uma
+versão independente — cole o conteúdo num notebook novo (Internet: ON) e use
+"Save Version → Save & Run All (Commit)" pra não perder o progresso se a
+sessão cair.
+
+| Arquivo | O que testa | Status |
+|---|---|---|
+| `kaggle_notebook_v2.py` | Decide se o ONI ajuda, com validação walk-forward + OOF pooling | ✅ rodou, ver resultado abaixo |
+| `kaggle_notebook_v3_trend.py` | v2 + feature de tendência temporal (ano) | testado dentro do v6 |
+| `kaggle_notebook_v4_modelcompare.py` | Compara LightGBM/LightGBM-RF/XGBoost + tuning com Optuna | superado pelo v5 |
+| `kaggle_notebook_v5_full.py` | v4 + HistGradientBoosting + Random Forest (sklearn) + GridSearchCV | ⚠️ travava no HistGB/RF (sklearn não aguenta o volume) |
+| **`kaggle_notebook_v5.2.py`** | **Igual ao v5, mas só com LightGBM/LightGBM-RF/XGBoost** (tirado o que travava) | ✅ versão atual pra comparação de modelo |
+| `kaggle_notebook_v6.py` | Testa as 4 combinações (nada/ONI/tendência/ONI+tendência) num pass só | ✅ rodando |
+| **`kaggle_notebook_v6.2.py`** | **v6 + testa blend com regressão Ridge** por cima da combinação vencedora | ✅ versão atual, mais completa |
+
+**Recomendação de uso agora:** `v5.2` (decide o melhor tipo de modelo) e
+`v6.2` (decide ONI/tendência/Ridge) — os outros ficam só de histórico.
+
+### Resultados parciais (fold 1 de 5, validação walk-forward 1998-2002)
+
+| Config | RMSE |
+|---|---|
+| base (sem ONI, sem tendência) | 1.7243 |
+| **oni** | **1.7136** (melhor) |
+| trend (só tendência de ano) | 1.7339 (pior que base) |
+| oni_trend (os dois) | 1.7150 |
+| lightgbm_rf | 1.7227 |
+| xgboost | 1.7100 (melhor entre os tipos de modelo) |
+
+Primeira leitura (ainda parcial, só 1 de 5 folds): **ONI ajuda, tendência de
+ano sozinha piora**, e XGBoost está ligeiramente à frente do LightGBM. Precisa
+dos outros 4 folds pra confirmar.
+
 ## Arquivos
 
 - `kaggle_notebook.py` — versão para rodar direto num notebook do Kaggle
@@ -135,7 +172,8 @@ mesmo padrão: ZCAS/ZCIT é a região mais difícil pra modelos baseados em árv
 - `oni.ascii.txt` — índice ONI histórico (NOAA), usado como feature de ENSO
 - `tna.data` / `tsa.data` — índices SST do Atlântico (NOAA), testados e descartados
 - `validate_leave_one_out.py` — validação "deixa 1 evento de El Niño de fora" (abortada por RAM)
-- `validate_walkforward.py` — validação walk-forward (`TimeSeriesSplit`), a correta
+- `validate_walkforward.py` — validação walk-forward (`TimeSeriesSplit`) local, janela deslizante fixa (pouca RAM)
+- `kaggle_notebook_v2.py` a `kaggle_notebook_v6.2.py` — ver tabela de notebooks acima
 - `reference_notebooks/` — notebooks do Rob Mulla (Kaggle Grandmaster) usados como
   referência de técnica (cross-validation, feature engineering, tuning)
 
@@ -150,6 +188,26 @@ python local_run.py
 Ajuste `DATA_DIR`, `YEAR_START` e `SMOOTH_SIZES` no topo de `local_run.py`
 conforme a RAM disponível.
 
+## Ideias exploradas (pesquisa adicional)
+
+**Modelo espacial (CNN)** — um colega de competição sugeriu treinar uma rede
+convolucional que enxerga a grade 2D inteira (como uma imagem multi-canal)
+em vez de tratar cada ponto de grade como uma linha independente. A
+literatura confirma que CNN/LSTM captura melhor a ZCAS/ZCIT do que modelos
+baseados em árvore -- mas tem uma armadilha: pra um CNN, cada **mês inteiro**
+é 1 amostra de treino, e só temos ~700 meses de histórico (contra ~40 milhões
+de linhas no formato tabular atual). Um estudo específico aponta que CNN com
+mais de 4 camadas convolucionais sofre overfitting sério com datasets desse
+tamanho. Conclusão: vale tentar, mas só com uma CNN rasa e bem regularizada
+-- ainda não implementado.
+
+**Regressão estatística (Ridge/Lasso/GAM/quantílica)** — pesquisa mostrou que
+regressão regularizada (Ridge/Lasso) lida bem com a multicolinearidade que já
+tínhamos identificado entre nossas variáveis atmosféricas, e é usada na
+literatura de downscaling climático com índices de teleconexão (ENSO etc.).
+Não costuma superar gradient boosting em RMSE puro, mas um blend
+(LightGBM + Ridge) é barato de testar -- implementado no `kaggle_notebook_v6.2.py`.
+
 ## Referências
 
 - Índice ONI (El Niño/La Niña): [NOAA CPC](https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt)
@@ -161,3 +219,16 @@ conforme a RAM disponível.
   - [Tutorial: Time Series Forecasting with XGBoost (Parte 1 e 2)](https://www.kaggle.com/code/robikscube/tutorial-time-series-forecasting-with-xgboost) — `TimeSeriesSplit`, lag features, walk-forward validation
   - [Ion Switching - 5KFold LGBM & Tracking](https://www.kaggle.com/code/robikscube/ion-switching-5kfold-lgbm-tracking) — padrão de out-of-fold (OOF) pooling e tracking sistemático de experimentos
   - [Fast Tuning with XGBoost + Optuna](https://www.kaggle.com/code/robikscube/fast-tuning-with-xgboost-3-0-optuna-gpus) — "hyperparameter tuning é inútil sem uma validação adequada" (por isso resolvemos a validação antes de ajustar hiperparâmetro)
+- Modelos espaciais (CNN/ConvLSTM/GNN) para clima/precipitação:
+  - [Convolutional LSTM Network: A Machine Learning Approach for Precipitation Nowcasting](https://arxiv.org/abs/1506.04214)
+  - [Deep learning for precipitation nowcasting: A survey](https://arxiv.org/pdf/2406.04867)
+  - [Distributional Regression U-Nets for Precipitation Ensemble Forecasts](https://arxiv.org/pdf/2407.02125)
+  - [GraphCast (DeepMind) — resumo](https://ramkrishna2910.medium.com/graphcast-a-breakthrough-in-weather-forecasting-d70fae9ac365)
+  - [WeatherBench: A Benchmark Dataset for Data-Driven Weather Forecasting](https://arxiv.org/pdf/2002.00469)
+  - [Training ML models on climate model output para seasonal precipitation forecasts](https://www.nature.com/articles/s43247-021-00225-4) — achado-chave sobre overfitting de CNN em dataset pequeno
+  - [Tabular data: Deep learning is not all you need](https://arxiv.org/pdf/2106.03253)
+- Regressão estatística em clima:
+  - [Comparison of linear, GAM e ML para interpolação climática espacial](https://link.springer.com/article/10.1007/s00704-023-04725-5)
+  - [Improving precipitation forecasts using extreme quantile regression](https://arxiv.org/abs/1806.05429)
+  - [LASSO as a tool for downscaling summer rainfall](https://www.tandfonline.com/doi/full/10.1080/02626667.2019.1570210)
+  - [Modeling extreme precipitation in South America using climate indices: an interpretable linear framework](https://link.springer.com/article/10.1007/s00704-026-06243-6)
