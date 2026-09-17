@@ -176,6 +176,8 @@ dos outros 4 folds pra confirmar.
 - `kaggle_notebook_v2.py` a `kaggle_notebook_v6.2.py` — ver tabela de notebooks acima
 - `reference_notebooks/` — notebooks do Rob Mulla (Kaggle Grandmaster) usados como
   referência de técnica (cross-validation, feature engineering, tuning)
+- `papers/` — PDFs dos artigos do arXiv citados nas Referências (os pagos/paywall
+  não puderam ser baixados, só ficam como link)
 
 ## Como reproduzir
 
