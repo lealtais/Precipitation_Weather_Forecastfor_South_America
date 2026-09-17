@@ -28,8 +28,9 @@ SMOOTH_SIZES = (3,)
 ONI_LAGS = (0, 1, 2)
 EPOCH_YEAR = 1940
 N_SPLITS = 5
-TEST_SIZE_MONTHS = 60   # ~5 anos por fold, igual ao gap usado na validação antiga
-GAP_MONTHS = 2          # = MAX_LAG, evita qualquer sombra de vazamento
+TEST_SIZE_MONTHS = 60    # ~5 anos por fold
+GAP_MONTHS = 2           # = MAX_LAG, evita qualquer sombra de vazamento
+MAX_TRAIN_MONTHS = 200   # janela de treino FIXA (deslizante, não crescente) -- evita OOM nos folds mais tardios (RAM está bem curta agora)
 
 
 def load(name):
@@ -146,12 +147,21 @@ FEATURES_NO_ONI = [c for c in FEATURES_WITH_ONI if c not in ONI_COLS]
 tss = TimeSeriesSplit(n_splits=N_SPLITS, test_size=TEST_SIZE_MONTHS, gap=GAP_MONTHS)
 time_idx_arr = np.arange(n_time)
 
+
+def cap_train_window(tr_time_idx, max_months):
+    """Janela de treino deslizante: mantém só os `max_months` mais recentes
+    antes da validação, em vez de deixar crescer sem limite (evita OOM)."""
+    if len(tr_time_idx) <= max_months:
+        return tr_time_idx
+    return tr_time_idx[-max_months:]
+
 results = {"com_oni": [], "sem_oni": []}
 oof_pred = {"com_oni": np.full(len(df), np.nan, dtype=np.float32),
             "sem_oni": np.full(len(df), np.nan, dtype=np.float32)}
 oof_covered = np.zeros(len(df), dtype=bool)
 
 for fold, (tr_time_idx, va_time_idx) in enumerate(tss.split(time_idx_arr)):
+    tr_time_idx = cap_train_window(tr_time_idx, MAX_TRAIN_MONTHS)
     va_start_month = pd.Timestamp(f"{YEAR_START}-01-01") + pd.DateOffset(months=int(va_time_idx.min()) + 1)
     va_end_month = pd.Timestamp(f"{YEAR_START}-01-01") + pd.DateOffset(months=int(va_time_idx.max()) + 1)
     print(f"\n=== Fold {fold+1}/{N_SPLITS}: valida {va_start_month:%Y-%m} a {va_end_month:%Y-%m} "
