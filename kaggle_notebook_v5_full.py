@@ -22,7 +22,7 @@
 # x 5 folds, depois um GridSearchCV inteiro) -- rode com calma, sem pressa.
 # ============================================================================
 
-### CÉLULA 1 — imports, config e download do índice ONI
+### CÉLULA 1 — imports, download dos dados da competição e do índice ONI
 import os
 import gc
 import urllib.request
@@ -31,11 +31,14 @@ import pandas as pd
 import xarray as xr
 import lightgbm as lgb
 import xgboost as xgb
+import kagglehub
 from scipy.ndimage import uniform_filter
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 
-DATA_DIR = "/kaggle/input/competitions/previsao-climatica-de-precipitacao-sobre-a-america-do-sul"
+# Baixa os dados por código -- não precisa clicar em "Add Input" na tela
+DATA_DIR = kagglehub.competition_download("previsao-climatica-de-precipitacao-sobre-a-america-do-sul")
+print("Dados da competição baixados em:", DATA_DIR, flush=True)
 WORK_DIR = "/kaggle/working"
 
 FEATURE_VARS = [

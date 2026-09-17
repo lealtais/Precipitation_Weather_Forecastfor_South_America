@@ -1,12 +1,12 @@
 # ============================================================================
 # WORCAP/INPE — Previsão climática de precipitação sobre a América do Sul
-# Versão 3 (variante da v2): mesma validação walk-forward + OOF pooling, mas
-# adiciona uma feature de TENDÊNCIA TEMPORAL (ano) -- a climatologia usada
-# hoje é uma média simples de 1965-2022, tratando um ano de 1965 igual a um
-# de 2022. Se houver uma tendência real de aquecimento/mudança no regime de
-# chuva ao longo das décadas, essa feature deixa o modelo capturar isso em
-# vez de perder o sinal numa média "borrada". Rode em paralelo com a v2 (não
-# precisa escolher: a validação da Célula 4 mostra se essa feature ajuda).
+# Versão 6: junta as duas perguntas em aberto (v2: o ONI ajuda de verdade? /
+# v3: existe uma tendência climática ao longo das décadas que a climatologia
+# simples não captura?) numa validação walk-forward só (TimeSeriesSplit +
+# OOF pooling, técnica do Rob Mulla), testando as 4 combinações possíveis:
+# nenhuma feature extra, só ONI, só tendência, ou as duas juntas. Mais leve
+# que testar 5 tipos de modelo (v5) -- usa só LightGBM, que já se mostrou
+# rápido e confiável.
 #
 # Como usar no Kaggle:
 #   1. Novo Notebook -> Add Input -> busque a competição e adicione o dataset
@@ -185,8 +185,16 @@ gc.collect()
 print("df pronto:", df.shape, flush=True)
 
 ONI_COLS = [f"oni_lag{lag}" for lag in ONI_LAGS]
-FEATURES_WITH_ONI = [c for c in df.columns if c not in ("y_true", "y_resid")]
-FEATURES_NO_ONI = [c for c in FEATURES_WITH_ONI if c not in ONI_COLS]
+TREND_COLS = ["year_trend"]
+ALL_FEATURES = [c for c in df.columns if c not in ("y_true", "y_resid")]
+BASE_FEATURES = [c for c in ALL_FEATURES if c not in ONI_COLS + TREND_COLS]
+
+FEATURE_SETS = {
+    "base": BASE_FEATURES,
+    "oni": BASE_FEATURES + ONI_COLS,
+    "trend": BASE_FEATURES + TREND_COLS,
+    "oni_trend": BASE_FEATURES + ONI_COLS + TREND_COLS,
+}
 
 LGB_PARAMS = dict(
     objective="regression", n_estimators=3000, learning_rate=0.03,
@@ -196,14 +204,14 @@ LGB_PARAMS = dict(
 )
 
 
-### CÉLULA 4 — validação walk-forward (janela expansiva) com e sem ONI
+### CÉLULA 4 — validação walk-forward testando as 4 combinações (ONI x tendência)
 tss = TimeSeriesSplit(n_splits=N_SPLITS, test_size=TEST_SIZE_MONTHS, gap=GAP_MONTHS)
 time_idx_arr = np.arange(n_time)
 
-results = {"com_oni": [], "sem_oni": []}
-best_iters = {"com_oni": [], "sem_oni": []}
-oof_pred = {"com_oni": np.full(len(df), np.nan, dtype=np.float32),
-            "sem_oni": np.full(len(df), np.nan, dtype=np.float32)}
+CONFIGS = list(FEATURE_SETS.keys())
+results = {c: [] for c in CONFIGS}
+best_iters = {c: [] for c in CONFIGS}
+oof_pred = {c: np.full(len(df), np.nan, dtype=np.float32) for c in CONFIGS}
 oof_covered = np.zeros(len(df), dtype=bool)
 
 for fold, (tr_time_idx, va_time_idx) in enumerate(tss.split(time_idx_arr)):
@@ -219,7 +227,8 @@ for fold, (tr_time_idx, va_time_idx) in enumerate(tss.split(time_idx_arr)):
     true_va = df.loc[valid_mask, "y_true"].values
     clim_va = df.loc[valid_mask, "clim_tp_next"].values
 
-    for label, feats in [("com_oni", FEATURES_WITH_ONI), ("sem_oni", FEATURES_NO_ONI)]:
+    for config_name in CONFIGS:
+        feats = FEATURE_SETS[config_name]
         X_tr = df.loc[train_mask, feats]
         y_tr = df.loc[train_mask, "y_resid"]
         X_va = df.loc[valid_mask, feats]
@@ -230,34 +239,34 @@ for fold, (tr_time_idx, va_time_idx) in enumerate(tss.split(time_idx_arr)):
               callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)])
         pred = np.clip(m.predict(X_va, num_iteration=m.best_iteration_) + clim_va, 0, None)
         rmse = np.sqrt(np.mean((pred - true_va) ** 2))
-        results[label].append(rmse)
-        best_iters[label].append(m.best_iteration_)
-        oof_pred[label][valid_mask] = pred
-        print(f"  {label:10s} RMSE = {rmse:.4f}  (best_iter={m.best_iteration_})", flush=True)
+        results[config_name].append(rmse)
+        best_iters[config_name].append(m.best_iteration_)
+        oof_pred[config_name][valid_mask] = pred
+        print(f"  {config_name:10s} RMSE = {rmse:.4f}  (best_iter={m.best_iteration_})", flush=True)
         del X_tr, y_tr, X_va, y_va, m
         gc.collect()
 
 print("\n=== Resumo (média simples dos folds) ===", flush=True)
-print(f"COM  ONI: {np.mean(results['com_oni']):.4f}  (por fold: {[round(x,4) for x in results['com_oni']]})", flush=True)
-print(f"SEM  ONI: {np.mean(results['sem_oni']):.4f}  (por fold: {[round(x,4) for x in results['sem_oni']]})", flush=True)
-n_wins_oni = sum(a < b for a, b in zip(results["com_oni"], results["sem_oni"]))
-print(f"ONI venceu em {n_wins_oni} de {N_SPLITS} folds", flush=True)
+for config_name in CONFIGS:
+    print(f"{config_name:10s}: {np.mean(results[config_name]):.4f}  "
+          f"(por fold: {[round(x,4) for x in results[config_name]]})", flush=True)
 
 true_all = df.loc[oof_covered, "y_true"].values
 print("\n=== RMSE agregado (out-of-fold pooling) ===", flush=True)
 rmse_oof = {}
-for label in ("com_oni", "sem_oni"):
-    p = oof_pred[label][oof_covered]
-    rmse_oof[label] = np.sqrt(np.mean((p - true_all) ** 2))
-    print(f"{label}: {rmse_oof[label]:.4f}", flush=True)
+for config_name in CONFIGS:
+    p = oof_pred[config_name][oof_covered]
+    rmse_oof[config_name] = np.sqrt(np.mean((p - true_all) ** 2))
+    print(f"{config_name:10s}: {rmse_oof[config_name]:.4f}", flush=True)
 
-USE_ONI = rmse_oof["com_oni"] < rmse_oof["sem_oni"]
-FEATURES_FINAL = FEATURES_WITH_ONI if USE_ONI else FEATURES_NO_ONI
-WINNER = "com_oni" if USE_ONI else "sem_oni"
-print(f"\n>>> Decisão: {'USAR' if USE_ONI else 'NÃO usar'} ONI no modelo final <<<", flush=True)
+WINNER = min(rmse_oof, key=rmse_oof.get)
+FEATURES_FINAL = FEATURE_SETS[WINNER]
+print(f"\n>>> Decisão: usar a combinação '{WINNER}' no modelo final "
+      f"(ONI: {'sim' if WINNER in ('oni', 'oni_trend') else 'não'}, "
+      f"tendência: {'sim' if WINNER in ('trend', 'oni_trend') else 'não'}) <<<", flush=True)
 
 # nº de árvores pro modelo final = mediana das best_iteration dos folds do
-# lado vencedor, com uma margem, já que o fit final não tem holdout próprio
+# vencedor, com uma margem, já que o fit final não tem holdout próprio
 N_ESTIMATORS_FINAL = int(np.median(best_iters[WINNER]) * 1.2)
 print(f"n_estimators do modelo final: {N_ESTIMATORS_FINAL} "
       f"(mediana dos folds: {best_iters[WINNER]})", flush=True)
