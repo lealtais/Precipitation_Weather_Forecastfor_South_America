@@ -143,3 +143,41 @@ conclusões práticas.
 - https://arxiv.org/pdf/2207.04794
 - https://arxiv.org/pdf/1602.06872
 - https://arxiv.org/pdf/2307.01872
+
+## Pesquisa adicional (2026-09-18): loss function, teleconexões extras, papers do mesmo problema
+
+**Tweedie loss (a ideia mais promissora encontrada nessa rodada)** — RMSE
+puro assume erro "gaussiano", mas precipitação é zero-inflada e assimétrica
+(muitos meses perto de zero, poucos com valores bem altos). A distribuição
+Tweedie foi feita exatamente pra esse tipo de dado, e tanto LightGBM
+(`objective="tweedie"`) quanto XGBoost já suportam nativamente:
+- https://arxiv.org/pdf/2509.08369 ("Stop using root-mean-square error as a precipitation target!")
+- https://arxiv.org/pdf/2604.19340 (Tweedie + feature selection em pós-processamento de previsão do tempo)
+- https://www.kaggle.com/competitions/m5-forecasting-accuracy/discussion/155334 (Tweedie no LightGBM, discussão prática)
+- https://scikit-learn.org/stable/auto_examples/linear_model/plot_tweedie_regression_insurance_claims.html
+- https://github.com/catboost/tutorials/blob/master/regression/tweedie.ipynb
+- https://sathesant.medium.com/tweedie-loss-function-395d96883f0b
+
+**Papers específicos sobre o MESMO problema (precipitação sazonal na América
+do Sul com gradient boosting)** — vale ler antes de qualquer coisa, é o mais
+próximo do nosso caso exato:
+- https://arxiv.org/abs/2512.13910 (compara ML/DL/XAI pra previsão sazonal de precipitação na América do Sul)
+- https://www.researchgate.net/publication/358256945_South_America_Seasonal_Precipitation_Prediction_by_Gradient-Boosting_Machine-Learning_Approach (usa Optuna pra tuning, mesma técnica que já testamos)
+- https://link.springer.com/article/10.1007/s40314-025-03438-x (LightGBM com quantificação de incerteza pra precipitação na América do Sul)
+
+**Teleconexões além do ONI** — a literatura aponta outros índices climáticos
+que também influenciam a chuva na América do Sul e que ainda não testamos:
+- PDO (Pacific Decadal Oscillation) — https://www.nature.com/articles/s41612-024-00852-6
+- SAM / Antarctic Oscillation — https://journals.ametsoc.org/view/journals/clim/22/22/2009jcli3036.1.xml
+- MJO (Madden-Julian Oscillation) — https://arxiv.org/pdf/2507.20289 e https://psl.noaa.gov/mjo/MJOprimer/
+- Visão geral de todas as teleconexões relevantes pra América do Sul — https://nyaspubs.onlinelibrary.wiley.com/doi/10.1111/nyas.14592
+
+**Pós-processamento (bias correction) — aplicar depois da previsão, não no treino:**
+- https://medium.com/@juanmi.gutierrez/quantile-mapping-bias-correction-63ed01d5a618
+- https://doi.org/10.3390/rs15071743
+- https://link.springer.com/article/10.1007/s12145-021-00577-7 (correção de viés com Random Forest, comparado com quantile mapping)
+
+**Técnicas gerais de Kaggle Grandmaster (tabular):**
+- https://developer.nvidia.com/blog/the-kaggle-grandmasters-playbook-7-battle-tested-modeling-techniques-for-tabular-data
+- https://developer.nvidia.com/blog/grandmaster-pro-tip-winning-first-place-in-a-kaggle-competition-with-stacking-using-cuml/
+- https://app.daily.dev/posts/the-kaggle-grandmasters-playbook-7-battle-tested-modeling-techniques-for-tabular-data-l9wf9m7oo

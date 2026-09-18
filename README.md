@@ -244,6 +244,32 @@ literatura de downscaling climático com índices de teleconexão (ENSO etc.).
 Não costuma superar gradient boosting em RMSE puro, mas um blend
 (LightGBM + Ridge) é barato de testar -- implementado no `kaggle_notebook_v6.2.py`.
 
+## Próximos passos sugeridos pela pesquisa (2026-09-18, ainda não implementados)
+
+Pesquisa em artigos/Kaggle/arXiv sobre o que mais pode ajudar. As duas
+primeiras ideias são as mais promissoras e mais baratas de testar (não
+exigem dados novos nem reescrever o pipeline inteiro):
+
+1. **Trocar a função de perda do treino pra `objective="tweedie"`** (LightGBM
+   e XGBoost já suportam nativamente). RMSE puro assume erro "gaussiano",
+   mas chuva é zero-inflada e assimétrica (muitos meses perto de zero, poucos
+   bem altos) -- a distribuição Tweedie foi feita exatamente pra esse tipo de
+   dado. Mesmo continuando a AVALIAR por RMSE (é a métrica da competição),
+   treinar com Tweedie pode gerar previsões melhores. É só trocar um
+   parâmetro, fácil de testar.
+2. **Adicionar mais índices de teleconexão além do ONI**: PDO (Pacific
+   Decadal Oscillation), SAM/Antarctic Oscillation e MJO (Madden-Julian
+   Oscillation) -- a literatura mostra que todos afetam a chuva na América
+   do Sul, e a força da própria teleconexão do ENSO muda dependendo da fase
+   do PDO. Todos têm índice histórico baixável do NOAA, igual o ONI.
+3. **Pós-processamento com quantile mapping** -- corrige viés sistemático
+   comparando a distribuição das previsões com a distribuição real, aplicado
+   DEPOIS do modelo já ter previsto (não mexe no treino).
+4. Achamos papers específicos sobre esse EXACT problema (gradient boosting
+   pra precipitação sazonal na América do Sul) -- vale ler antes de decidir
+   o que priorizar. Ver [REFERENCIAS.md](REFERENCIAS.md) pra lista completa
+   com todos os links dessa rodada de pesquisa.
+
 ## Referências
 
 Dados/índices usados de fato no modelo:
