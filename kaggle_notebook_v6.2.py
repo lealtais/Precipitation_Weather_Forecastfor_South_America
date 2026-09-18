@@ -27,7 +27,24 @@ import kagglehub
 from scipy.ndimage import uniform_filter
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
+
+
+class Float32Scaler:
+    """Substitui o StandardScaler do sklearn, que converte pra float64
+    internamente (dobra o uso de memória) -- aqui fica tudo em float32."""
+
+    def fit(self, X):
+        arr = X.values if hasattr(X, "values") else X
+        self.mean_ = arr.mean(axis=0, dtype=np.float32)
+        self.std_ = arr.std(axis=0, dtype=np.float32) + np.float32(1e-8)
+        return self
+
+    def transform(self, X):
+        arr = X.values if hasattr(X, "values") else X
+        return ((arr.astype(np.float32) - self.mean_) / self.std_).astype(np.float32)
+
+    def fit_transform(self, X):
+        return self.fit(X).transform(X)
 
 # Baixa os dados por código -- não precisa clicar em "Add Input" na tela
 DATA_DIR = kagglehub.competition_download("previsao-climatica-de-precipitacao-sobre-a-america-do-sul")
@@ -49,7 +66,7 @@ EPOCH_YEAR = 1940
 # Validação walk-forward: Kaggle tem bastante RAM, então usamos janela
 # EXPANSIVA de verdade (cada fold treina com tudo antes dele), sem precisar
 # do truque de janela fixa que usamos localmente por falta de memória.
-N_SPLITS = 5
+N_SPLITS = 3
 TEST_SIZE_MONTHS = 60
 GAP_MONTHS = MAX_LAG
 
@@ -290,7 +307,7 @@ for fold, (tr_time_idx, va_time_idx) in enumerate(tss.split(time_idx_arr)):
     y_tr = df.loc[train_mask, "y_resid"]
     X_va = df.loc[valid_mask, FEATURES_FINAL]
 
-    scaler = StandardScaler()
+    scaler = Float32Scaler()
     X_tr_s = scaler.fit_transform(X_tr)
     X_va_s = scaler.transform(X_va)
 
@@ -342,7 +359,7 @@ print((100 * imp / imp.sum()).round(1).to_string(), flush=True)
 final_ridge, final_scaler = None, None
 if USE_BLEND:
     print("\n--- treinando Ridge final (todos os dados) ---", flush=True)
-    final_scaler = StandardScaler()
+    final_scaler = Float32Scaler()
     X_all_s = final_scaler.fit_transform(X_all)
     final_ridge = Ridge(alpha=10.0, random_state=42)
     final_ridge.fit(X_all_s, y_all)
