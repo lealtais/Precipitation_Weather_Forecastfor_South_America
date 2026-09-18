@@ -141,9 +141,11 @@ sessão cair.
 | **`kaggle_notebook_v5.2.py`** | **Igual ao v5, mas só com LightGBM/LightGBM-RF/XGBoost** (tirado o que travava) | ✅ versão atual pra comparação de modelo |
 | `kaggle_notebook_v6.py` | Testa as 4 combinações (nada/ONI/tendência/ONI+tendência) num pass só | ✅ rodando |
 | **`kaggle_notebook_v6.2.py`** | **v6 + testa blend com regressão Ridge** por cima da combinação vencedora | ✅ versão atual, mais completa |
+| **`kaggle_notebook_v8_final_xgboost.py`** | **Modelo FINAL pra submissão**: treina direto com XGBoost + hiperparâmetros do GridSearchCV, sem comparar modelos de novo | ✅ pronto pra rodar e submeter |
 
-**Recomendação de uso agora:** `v5.2` (decide o melhor tipo de modelo) e
-`v6.2` (decide ONI/tendência/Ridge) — os outros ficam só de histórico.
+**Recomendação de uso agora:** `v6.2` (decide ONI/tendência/Ridge, ainda
+rodando) e depois `v8_final_xgboost` pra gerar a submissão de verdade — os
+outros ficam só de histórico.
 
 ### Resultados parciais (fold 1 de 5, validação walk-forward 1998-2002)
 
