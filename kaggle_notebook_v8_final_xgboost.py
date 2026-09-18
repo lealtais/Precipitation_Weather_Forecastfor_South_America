@@ -186,6 +186,46 @@ print("df pronto:", df.shape, flush=True)
 FEATURES_FINAL = [c for c in df.columns if c not in ("y_true", "y_resid")]
 
 
+### CÉLULA 3.5 — validação rápida (holdout dos últimos 60 meses, grid COMPLETO)
+# Só pra ter um RMSE de referência real (não do grid reduzido do teste local)
+# antes de gastar uma submissão. Treina com tudo antes do holdout, valida
+# nele, e descarta esse modelo -- o modelo de verdade (Célula 4) é treinado
+# com TODOS os dados, incluindo esse período.
+VAL_MONTHS_HOLDOUT = 60
+time_idx_arr = np.arange(n_time)
+val_time_idx = time_idx_arr[-VAL_MONTHS_HOLDOUT:]
+train_time_idx = time_idx_arr[:-VAL_MONTHS_HOLDOUT]
+
+train_mask = np.repeat(np.isin(time_idx_arr, train_time_idx), n_grid)
+valid_mask = np.repeat(np.isin(time_idx_arr, val_time_idx), n_grid)
+
+true_va = df.loc[valid_mask, "y_true"].values
+clim_va = df.loc[valid_mask, "clim_tp_next"].values
+X_tr_h = df.loc[train_mask, FEATURES_FINAL]
+y_tr_h = df.loc[train_mask, "y_resid"]
+X_va_h = df.loc[valid_mask, FEATURES_FINAL]
+
+print(f"\n=== Validação holdout (últimos {VAL_MONTHS_HOLDOUT} meses, grid completo) ===", flush=True)
+params_holdout = dict(tree_method="hist", subsample=0.8, colsample_bytree=0.8,
+                       reg_lambda=1.0, n_jobs=-1, random_state=42)
+params_holdout.update(BEST_PARAMS)
+params_holdout.update(n_estimators=N_ESTIMATORS_FINAL)
+m_holdout = xgb.XGBRegressor(**params_holdout)
+m_holdout.fit(X_tr_h, y_tr_h)
+pred_resid_h = m_holdout.predict(X_va_h)
+pred_h = np.clip(pred_resid_h + clim_va, 0, None)
+rmse_holdout = np.sqrt(np.mean((pred_h - true_va) ** 2))
+rmse_climatology_holdout = np.sqrt(np.mean((clim_va - true_va) ** 2))
+print(f"RMSE climatologia (baseline):        {rmse_climatology_holdout:.4f}", flush=True)
+print(f"RMSE XGBoost final (grid completo):  {rmse_holdout:.4f}", flush=True)
+print(f"Ganho sobre climatologia:             {100 * (1 - rmse_holdout / rmse_climatology_holdout):.1f}%", flush=True)
+print("(esse é o RMSE de referência local -- o resultado real no leaderboard "
+      "costuma ficar um pouco pior que esse, ver README)", flush=True)
+
+del X_tr_h, y_tr_h, X_va_h, m_holdout
+gc.collect()
+
+
 ### CÉLULA 4 — treinar o ensemble final de XGBoost com todo o histórico
 X_all = df[FEATURES_FINAL]
 y_all = df["y_resid"]
