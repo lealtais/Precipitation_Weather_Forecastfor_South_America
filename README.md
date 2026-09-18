@@ -160,6 +160,28 @@ Primeira leitura (ainda parcial, só 1 de 5 folds): **ONI ajuda, tendência de
 ano sozinha piora**, e XGBoost está ligeiramente à frente do LightGBM. Precisa
 dos outros 4 folds pra confirmar.
 
+### Comparação de modelos + modelo espacial (rodados localmente, grid reduzido)
+
+Enquanto o Kaggle processava o `v6.2`, rodamos localmente duas verificações
+com o grid espacial reduzido (1/3 ou 1/2 das células, pra caber na RAM da
+máquina local) — resultado direcional, não é o número final:
+
+| Modelo | RMSE (OOF, 3 folds) |
+|---|---|
+| **xgboost** | **1.7527** (melhor) |
+| lightgbm | 1.7539 |
+| random_forest | 1.7568 |
+| GridSearchCV (xgboost) | 1.7519 com `learning_rate=0.05, max_depth=6, min_child_weight=20` |
+
+Bate com o resultado parcial do `v5.2` no Kaggle (XGBoost levemente à frente).
+
+**Modelo espacial (CNN)** — implementado em `local_cnn_spatial.py` (ver
+detalhes na seção "Ideias exploradas" abaixo). Resultado: RMSE 1.8018 contra
+1.8336 da climatologia (ganho de só 1.7%) — **pior que LightGBM/XGBoost**
+(~1.75), confirmando a suspeita de que ~700 meses de histórico não são
+dados suficientes para uma CNN generalizar bem. Não vale a pena para
+submissão nesse momento.
+
 ## Arquivos
 
 - `kaggle_notebook.py` — versão para rodar direto num notebook do Kaggle
@@ -176,6 +198,9 @@ dos outros 4 folds pra confirmar.
 - `kaggle_notebook_v2.py` a `kaggle_notebook_v6.2.py` — ver tabela de notebooks acima
 - `reference_notebooks/` — notebooks do Rob Mulla (Kaggle Grandmaster) usados como
   referência de técnica (cross-validation, feature engineering, tuning)
+- `local_model_compare.py` — comparação local de LightGBM/XGBoost/RandomForest
+  + GridSearchCV, com grid espacial reduzido pra caber na RAM local
+- `local_cnn_spatial.py` — modelo espacial (CNN) local, ver resultado acima
 
 ## Como reproduzir
 
@@ -198,8 +223,17 @@ baseados em árvore -- mas tem uma armadilha: pra um CNN, cada **mês inteiro**
 é 1 amostra de treino, e só temos ~700 meses de histórico (contra ~40 milhões
 de linhas no formato tabular atual). Um estudo específico aponta que CNN com
 mais de 4 camadas convolucionais sofre overfitting sério com datasets desse
-tamanho. Conclusão: vale tentar, mas só com uma CNN rasa e bem regularizada
--- ainda não implementado.
+tamanho.
+
+**Implementado e testado** (`local_cnn_spatial.py`): CNN rasa (3 camadas
+convolucionais, dropout 0.3, weight decay), grid reduzido pela metade (151x131),
+10 canais de entrada (anomalias com lag, suavização, ONI, mês, climatologia),
+holdout cronológico dos últimos 60 meses. Parou por early stopping na epoch 32.
+Resultado: RMSE 1.8018 vs. 1.8336 da climatologia (ganho de só 1.7%) --
+bem pior que LightGBM/XGBoost (~1.75 no mesmo tipo de recorte). Confirma a
+suspeita: **~700 imagens mensais não são dados suficientes para a CNN
+generalizar melhor que gradient boosting nesse problema.** Não recomendado
+para submissão.
 
 **Regressão estatística (Ridge/Lasso/GAM/quantílica)** — pesquisa mostrou que
 regressão regularizada (Ridge/Lasso) lida bem com a multicolinearidade que já

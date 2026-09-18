@@ -1,0 +1,24 @@
+Carregando dados (grid reduzido em 1/2 x 1/2)...
+grid=151x131  n_time=695
+X pronto: (695, 10, 151, 131) (10 canais)
+treino: 635 meses | validação: 60 meses (últimos 60)
+
+Treinando CNN espacial...
+  epoch   1  train_mse=2.9680  val_mse=3.2762  (sem melhora há 0)
+  epoch   5  train_mse=2.9109  val_mse=3.2530  (sem melhora há 1)
+  epoch  10  train_mse=2.8974  val_mse=3.2677  (sem melhora há 6)
+  epoch  15  train_mse=2.9010  val_mse=3.2529  (sem melhora há 3)
+  epoch  20  train_mse=2.8823  val_mse=3.2567  (sem melhora há 8)
+  epoch  25  train_mse=2.8781  val_mse=3.2552  (sem melhora há 13)
+  epoch  30  train_mse=2.8818  val_mse=3.2597  (sem melhora há 18)
+  early stopping na epoch 32 (sem melhora por 20 epochs)
+
+=== Resultado (validação = últimos 60 meses) ===
+RMSE climatologia (baseline): 1.8336
+RMSE CNN espacial:            1.8018
+Ganho sobre climatologia:     1.7%
+
+(compare com o RMSE do LightGBM/XGBoost no mesmo tipo de recorte -- ver local_model_compare.py / kaggle_notebook_v5.2.py)
+
+Modelo salvo em cnn_spatial_model.pt
+=== FIM ===
