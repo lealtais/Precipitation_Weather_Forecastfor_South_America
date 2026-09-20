@@ -371,7 +371,7 @@ df_pred = pd.DataFrame({"id": ids, "tp_mm_day": pred_tp_final})
 sub_out = sub[["id"]].merge(df_pred, on="id", how="left")
 assert sub_out["tp_mm_day"].isna().sum() == 0, "Erro: existem IDs com valor NaN!"
 
-out_path = os.path.join(WORK_DIR, "submission_breakthrough.csv")
+out_path = os.path.join(WORK_DIR, "submission.csv")
 sub_out.to_csv(out_path, index=False)
 print("=" * 64)
 print(f"✅ SUCESSO! Submissão gerada em: {out_path}")
