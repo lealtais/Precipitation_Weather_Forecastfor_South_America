@@ -138,6 +138,10 @@ Tentativas descartadas:
   ganho na validação de El Niño) — mais histórico ajuda mais que recência
 - CatBoost em vez de LightGBM: abortado, estimativa de 15+ horas de treino
   pra esse volume de dados (LightGBM treina o mesmo em minutos)
+- Índice PDO (Pacific Decadal Oscillation) como feature extra, com interação
+  ONI×PDO: testado via walk-forward em cima do `oni_sensmap_xgb_blend`, piorou
+  levemente (1.7890 → 1.7896) e sem consistência entre folds (ganhou em 2 de 5)
+  — ruído, não sinal real
 
 ## Diagnóstico: onde o modelo ainda erra mais
 
