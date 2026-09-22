@@ -70,6 +70,11 @@ justamente aí que o índice ONI ajuda o modelo a compensar).
 | v6 | El Niño (48 meses) | 1965+ | v5 + índice ONI | 1.8905 | 2.0599 | 8.2% | — |
 | v7 | El Niño (48 meses) | 1965+ | v6 + ONI com lag (0/1/2) + ensemble 3 seeds | 1.8861 | 2.0599 | 8.4% | **1.96904** (pior que v4!) |
 | — | últimos 5 anos | 1995+ | igual a v4 (menos anos) | 1.9311 | 2.0469 | 5.7% | — |
+| **v12** | **walk-forward (5 folds, 1970-2019)** | 1970+ | ONI + mapa de sensibilidade ao ENSO por ponto de grade, fold-safe | 1.7915 | 1.8600* | 3.68%* | **1.86374** |
+
+\* RMSE/ganho da validação v12 são a média entre os 5 folds (climatologias
+diferentes por período); não comparável linha a linha com v1-v7, que usam uma
+única janela de validação. O número que importa é o leaderboard real.
 
 **⚠️ Alerta importante: a validação em anos de El Niño (v5-v7) não previu o
 resultado real.** v7 parecia melhor que v4 na validação local (8.4% vs. 2.0%
@@ -78,19 +83,35 @@ v4). A suspeita é que, ao validar só nos mesmos 4 eventos históricos de El
 Niño usados no treino (pool de 48 meses vindos de só 4 episódios), o modelo
 com ONI pode ter aprendido a reconhecer a assinatura específica desses 4
 eventos em vez do efeito genérico do ENSO -- o que não necessariamente
-generaliza pro evento real de 2023-2024. **Até isso ser resolvido, v4 (mais
-simples, sem ONI) é o nosso melhor resultado real confirmado.**
+generaliza pro evento real de 2023-2024.
 
 Tentamos uma validação "leave-one-event-out" (`validate_leave_one_out.py`),
 mas abortamos por travar com pouca RAM livre. Baseado nos notebooks de
 referência do Rob Mulla (ver Referências), trocamos pra uma validação
-**walk-forward** de verdade (`validate_walkforward.py`, estilo
-`TimeSeriesSplit` do sklearn): vários folds cobrindo janelas de tempo
-diferentes ao longo de todo o histórico (não só os 4 eventos de El Niño),
-cada um treinando só com o passado e validando num pedaço nunca visto do
-"futuro" -- é o jeito estatisticamente correto de saber se o ONI generaliza,
-em vez de validar numa seleção enviesada por características do próprio
-evento que queremos prever. Resultado: *(rodando)*.
+**walk-forward** de verdade (`kaggle_notebook_v12_walkforward.py`, estilo
+`TimeSeriesSplit` do sklearn): 5 folds cobrindo janelas de tempo diferentes
+ao longo de todo o histórico (1970-2019, não só os 4 eventos de El Niño),
+cada um treinando só com o passado, recalculando climatologia e o mapa de
+sensibilidade ao ENSO só com dado do próprio fold (sem vazamento), e
+validando num pedaço nunca visto do "futuro".
+
+| Config | RMSE médio (5 folds) | Ganho médio sobre climatologia |
+|---|---|---|
+| baseline_sem_oni | 1.7997 | 3.24% |
+| oni_simples | 1.7964 | 3.42% |
+| **oni_sensmap** | **1.7915** | **3.68%** |
+| oni_sensmap_fisica_anom | 1.7914 | 3.69% |
+| oni_sensmap_fisica_raw | 1.7906 | 3.72% |
+
+As features físicas (fluxo de umidade, instabilidade térmica) não trouxeram
+ganho fora do ruído entre folds — ficaram de fora. `oni_sensmap` (ONI + mapa
+de sensibilidade ao ENSO por ponto de grade, recalculado por fold) venceu com
+a mesma performance das versões com física, só que mais simples.
+
+**Confirmado no leaderboard real com `kaggle_notebook_v12_final_submission.py`: RMSE 1.86374** —
+melhora real sobre o v4 (1.95569), e dessa vez a validação local (walk-forward,
+~3.7% de ganho) bateu com o resultado real, ao contrário do que aconteceu com
+v5-v7. **v12 (`oni_sensmap`) é agora o nosso melhor resultado real confirmado.**
 
 Tentativas descartadas:
 - `objective="tweedie"` sobre o valor absoluto (em vez do resíduo): piorou (-2.9%)
@@ -203,6 +224,17 @@ submissão nesse momento.
 - `local_model_compare.py` — comparação local de LightGBM/XGBoost/RandomForest
   + GridSearchCV, com grid espacial reduzido pra caber na RAM local
 - `local_cnn_spatial.py` — modelo espacial (CNN) local, ver resultado acima
+- `kaggle_solution_breakthrough.py` — primeira versão com Z-score por ponto de
+  grade, mapa de sensibilidade ao ENSO e features físicas de transporte de
+  umidade; **não tinha validação alguma antes de submeter** — serviu de ponto
+  de partida pro v12, mas não deve ser usado diretamente
+- `kaggle_notebook_v12_walkforward.py` — validação walk-forward fold-safe
+  (5 folds, recalcula climatologia e mapa de sensibilidade ao ENSO só com o
+  passado de cada fold) comparando 5 configs; ver tabela de resultado acima
+- `kaggle_notebook_v12_final_submission.py` — modelo final pra submissão,
+  config vencedora (`oni_sensmap`) treinada em 100% do histórico; gera
+  `submission.csv`. **Só roda no Kaggle** (grade cheia + ~52 anos de histórico
+  não cabe na RAM de uma máquina local de 16GB)
 
 ## Como reproduzir
 
