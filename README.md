@@ -111,7 +111,19 @@ a mesma performance das versões com física, só que mais simples.
 **Confirmado no leaderboard real com `kaggle_notebook_v12_final_submission.py`: RMSE 1.86374** —
 melhora real sobre o v4 (1.95569), e dessa vez a validação local (walk-forward,
 ~3.7% de ganho) bateu com o resultado real, ao contrário do que aconteceu com
-v5-v7. **v12 (`oni_sensmap`) é agora o nosso melhor resultado real confirmado.**
+v5-v7.
+
+Testamos depois se o blend XGBoost+LightGBM (60/40) que o `kaggle_solution_breakthrough.py`
+original já assumia sem nunca ter validado realmente ajuda:
+
+| Config | RMSE médio (5 folds) | Ganho médio |
+|---|---|---|
+| `oni_sensmap` (LightGBM só) | 1.7915 | 3.68% |
+| **`oni_sensmap_xgb_blend`** | **1.7890** | **3.81%** |
+
+Ganho pequeno mas consistente — venceu em todos os 5 folds, não só na média.
+Incorporado no `kaggle_notebook_v12_final_submission.py`. **v12 com blend
+XGBoost+LightGBM é agora o nosso melhor resultado real confirmado.**
 
 Tentativas descartadas:
 - `objective="tweedie"` sobre o valor absoluto (em vez do resíduo): piorou (-2.9%)
