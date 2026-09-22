@@ -166,13 +166,15 @@ FEATURES = [c for c in df_train.columns if c != "target_z"]
 
 print(f"Shape do Dataset de Treino: {df_train.shape}", flush=True)
 
-print("Treinando LightGBM (config validada por walk-forward: oni_sensmap)...", flush=True)
+sample_weight = np.clip(clim_s_flat ** 2, np.percentile(clim_s_flat ** 2, 1), np.percentile(clim_s_flat ** 2, 99))
+
+print("Treinando LightGBM (config validada por walk-forward: oni_sensmap + sample_weight sigma^2)...", flush=True)
 lgb_model = lgb.LGBMRegressor(
     n_estimators=450, learning_rate=0.04, num_leaves=63,
     min_child_samples=500, subsample=0.8, colsample_bytree=0.8,
     reg_lambda=2.0, random_state=123, n_jobs=-1,
 )
-lgb_model.fit(df_train[FEATURES], df_train["target_z"])
+lgb_model.fit(df_train[FEATURES], df_train["target_z"], sample_weight=sample_weight)
 
 print("Treinando XGBoost (blend validado por walk-forward: +0.13% de ganho sobre LightGBM puro)...", flush=True)
 xgb_model = xgb.XGBRegressor(
@@ -180,7 +182,7 @@ xgb_model = xgb.XGBRegressor(
     min_child_weight=30, subsample=0.8, colsample_bytree=0.8,
     reg_lambda=2.0, tree_method="hist", random_state=42, n_jobs=-1,
 )
-xgb_model.fit(df_train[FEATURES], df_train["target_z"])
+xgb_model.fit(df_train[FEATURES], df_train["target_z"], sample_weight=sample_weight)
 
 del df_train
 gc.collect()

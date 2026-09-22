@@ -142,6 +142,31 @@ Tentativas descartadas:
   ONI×PDO: testado via walk-forward em cima do `oni_sensmap_xgb_blend`, piorou
   levemente (1.7890 → 1.7896) e sem consistência entre folds (ganhou em 2 de 5)
   — ruído, não sinal real
+- Transformação `sign(z) * log1p(|z|)` no alvo (em vez do Z-score puro), pra
+  lidar com a assimetria da chuva: piorou (1.7890 → 1.7963), perdeu em 4 de 5
+  folds
+
+## Colaboração com Antigravity (Google/Gemini)
+
+A partir de 22/09/2026, o desenvolvimento passou a ser feito em conjunto com
+outro agente (Antigravity), coordenado pela Taís via um documento de diálogo
+assíncrono (`CONVERSA_ANTIGRAVITY_CLAUDE.md`, mantido fora deste repo). Log
+das decisões que vieram dessa colaboração:
+
+- **`sample_weight = clip(σ_clim², p1, p99)` no treino do LightGBM/XGBoost**
+  (proposta do Antigravity): o treino original minimiza MSE em Z-score com
+  peso uniforme, mas o Kaggle avalia RMSE em mm — nessa escala, errar na
+  Amazônia (σ≈6mm) pesa ~144x mais que errar no Sul/deserto (σ≈0.5mm).
+  Pesar o treino por σ² alinha a otimização com a métrica real. Validado via
+  walk-forward: **RMSE 1.7890 → 1.7848 (ganho 3.81% → 4.03%)**, venceu em 4
+  dos 5 folds. **Incorporado no `kaggle_notebook_v12_final_submission.py`.**
+  Ressalva registrada: isso empurra o modelo a focar ainda mais na Amazônia
+  (onde já ganhávamos mais) e potencialmente menos na ZCAS/Centro (onde o
+  ganho já era fraco) — o ganho agregado é real, mas não resolve o problema
+  estrutural da ZCAS discutido no diagnóstico acima.
+- Próximas frentes em aberto na colaboração: calibração pós-predição por
+  macrozona (Norte/Central/Sul) pra corrigir compressão de variância do GBDT,
+  e features de divergência de fluxo de umidade + índice SALLJ pra ZCAS.
 
 ## Diagnóstico: onde o modelo ainda erra mais
 
