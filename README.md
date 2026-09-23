@@ -164,9 +164,28 @@ das decisões que vieram dessa colaboração:
   (onde já ganhávamos mais) e potencialmente menos na ZCAS/Centro (onde o
   ganho já era fraco) — o ganho agregado é real, mas não resolve o problema
   estrutural da ZCAS discutido no diagnóstico acima.
-- Próximas frentes em aberto na colaboração: calibração pós-predição por
-  macrozona (Norte/Central/Sul) pra corrigir compressão de variância do GBDT,
-  e features de divergência de fluxo de umidade + índice SALLJ pra ZCAS.
+  **Confirmado no leaderboard real: RMSE 1.84336** (vs. 1.86374 sem o σ²,
+  vs. 1.95569 do v4) — bateu até melhor que a estimativa da validação local.
+  **Este é o nosso melhor resultado real confirmado até agora.**
+- Testado e descartado no mesmo dia: calibração pós-predição por macrozona
+  (Norte/Central/Sul) para corrigir a compressão de variância do GBDT —
+  piorou em todos os 5 folds (ex.: 1.9215 → 2.0702 no fold 1), porque
+  "esticar" a variância marginal amplifica erro tanto quanto sinal (a
+  correlação previsão×real não é perfeita). O Antigravity depois formalizou
+  matematicamente por que isso — e quantile mapping — sempre pioram RMSE
+  (Lei da Variância Total: o previsor ótimo sob RMSE tem, por definição,
+  variância menor que a real).
+- Divergência de fluxo de umidade + índice SALLJ (proposta do Antigravity
+  para a ZCAS): testado via walk-forward, empate técnico/levemente pior —
+  descartado.
+- Tuning leve de hiperparâmetro (mais árvores + learning rate menor,
+  árvores mais profundas): mais árvores foi neutro (diferença menor que o
+  ruído entre folds), árvores mais profundas piorou de forma consistente
+  (overfit). Não alterou o script final.
+- ConvLSTM2D (testado a partir do notebook de um colega de equipe): RMSE
+  pior que a climatologia mesmo convergido (40 épocas, -21% e -16% nos 2
+  folds testados) — confirma a mesma limitação já documentada da CNN espacial
+  (pouco dado histórico mensal para deep learning espacial generalizar).
 
 ## Diagnóstico: onde o modelo ainda erra mais
 
